@@ -1,0 +1,278 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerified() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidStringList(arr, maxLen) {
+      return arr is list
+        && arr.size() <= maxLen
+        && (arr.size() == 0 || (arr[0] is string && arr[0].size() <= 500));
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'name', 'email', 'preferredCurrency', 'theme',
+          'notificationsEnabled', 'budgetAlertThreshold', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'name', 'email', 'preferredCurrency', 'theme',
+          'notificationsEnabled', 'budgetAlertThreshold', 'createdAt', 'updatedAt'
+        ])
+        && data.uid is string
+        && data.uid == request.auth.uid
+        && data.uid == userId
+        && isValidId(data.uid)
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 100
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.preferredCurrency is string
+        && data.preferredCurrency.size() == 3
+        && data.preferredCurrency in ['INR', 'USD', 'EUR', 'GBP']
+        && data.theme is string
+        && data.theme.size() >= 4
+        && data.theme.size() <= 5
+        && data.theme in ['light', 'dark']
+        && data.notificationsEnabled is bool
+        && data.budgetAlertThreshold is int
+        && data.budgetAlertThreshold >= 50
+        && data.budgetAlertThreshold <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'amountPaise', 'type', 'category', 'description',
+          'transactionDate', 'month', 'year', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'amountPaise', 'type', 'category', 'description',
+          'transactionDate', 'month', 'year', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.userId == userId
+        && isValidId(data.userId)
+        && data.amountPaise is int
+        && data.amountPaise > 0
+        && data.amountPaise <= 100000000000
+        && data.type is string
+        && data.type.size() >= 6
+        && data.type.size() <= 7
+        && data.type in ['income', 'expense']
+        && data.category is string
+        && data.category.size() >= 1
+        && data.category.size() <= 50
+        && (
+          (data.type == 'income' && data.category in [
+            'Salary', 'Freelancing', 'Business', 'Investments', 'Allowance', 'Other Income'
+          ]) ||
+          (data.type == 'expense' && data.category in [
+            'Food', 'Transportation', 'Shopping', 'Education', 'Healthcare',
+            'Entertainment', 'Housing', 'Bills', 'Travel', 'Groceries', 'Personal Care', 'Other'
+          ])
+        )
+        && data.description is string
+        && data.description.size() >= 1
+        && data.description.size() <= 250
+        && data.transactionDate is string
+        && data.transactionDate.size() == 10
+        && data.transactionDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.month is int
+        && data.month >= 1
+        && data.month <= 12
+        && data.year is int
+        && data.year >= 2000
+        && data.year <= 2100
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBudget(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'category', 'monthlyLimitPaise', 'month', 'year', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'category', 'monthlyLimitPaise', 'month', 'year', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.userId == userId
+        && isValidId(data.userId)
+        && data.category is string
+        && data.category.size() >= 1
+        && data.category.size() <= 50
+        && data.category in [
+          'Food', 'Transportation', 'Shopping', 'Education', 'Healthcare',
+          'Entertainment', 'Housing', 'Bills', 'Travel', 'Groceries', 'Personal Care', 'Other'
+        ]
+        && data.monthlyLimitPaise is int
+        && data.monthlyLimitPaise > 0
+        && data.monthlyLimitPaise <= 100000000000
+        && data.month is int
+        && data.month >= 1
+        && data.month <= 12
+        && data.year is int
+        && data.year >= 2000
+        && data.year <= 2100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInsight(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'period', 'insightType', 'summary', 'observations',
+          'unusualSpending', 'savingsSuggestions', 'budgetRecommendations',
+          'disclaimer', 'generatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'period', 'insightType', 'summary', 'observations',
+          'unusualSpending', 'savingsSuggestions', 'budgetRecommendations',
+          'disclaimer', 'generatedAt'
+        ])
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.userId == userId
+        && isValidId(data.userId)
+        && data.period is string
+        && data.period.size() >= 1
+        && data.period.size() <= 40
+        && data.insightType is string
+        && data.insightType.size() >= 1
+        && data.insightType.size() <= 30
+        && data.insightType in ['monthly_comprehensive', 'spending_alert', 'budget_review']
+        && data.summary is string
+        && data.summary.size() >= 1
+        && data.summary.size() <= 2000
+        && isValidStringList(data.observations, 10)
+        && isValidStringList(data.unusualSpending, 10)
+        && isValidStringList(data.savingsSuggestions, 10)
+        && isValidStringList(data.budgetRecommendations, 10)
+        && data.disclaimer is string
+        && data.disclaimer.size() >= 1
+        && data.disclaimer.size() <= 500
+        && data.generatedAt is timestamp;
+    }
+
+    // Users Collection (PII isolated to owner only)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().email == request.auth.token.email
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'preferredCurrency', 'theme',
+          'notificationsEnabled', 'budgetAlertThreshold', 'updatedAt'
+        ]);
+      allow delete: if false;
+
+      // Transactions Subcollection
+      match /transactions/{transactionId} {
+        allow get: if isValidId(userId) && isValidId(transactionId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(transactionId)
+          && isOwner(userId)
+          && isValidTransaction(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(transactionId)
+          && isOwner(userId)
+          && isValidTransaction(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'amountPaise', 'type', 'category', 'description',
+            'transactionDate', 'month', 'year', 'isSample', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(transactionId) && isOwner(userId);
+      }
+
+      // Budgets Subcollection
+      match /budgets/{budgetId} {
+        allow get: if isValidId(userId) && isValidId(budgetId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(budgetId)
+          && isOwner(userId)
+          && isValidBudget(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isValidId(userId)
+          && isValidId(budgetId)
+          && isOwner(userId)
+          && isValidBudget(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'category', 'monthlyLimitPaise', 'month', 'year', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(budgetId) && isOwner(userId);
+      }
+
+      // AI Insights Subcollection
+      match /insights/{insightId} {
+        allow get: if isValidId(userId) && isValidId(insightId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId)
+          && isValidId(insightId)
+          && isOwner(userId)
+          && isValidInsight(incoming(), userId)
+          && incoming().generatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(insightId) && isOwner(userId);
+      }
+    }
+  }
+}
